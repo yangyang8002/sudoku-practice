@@ -539,18 +539,19 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             border-bottom: 2px solid var(--text-color);
         }
 
+        /* 优化标记显示 - 使用紧凑布局 */
         .notes {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(3, 1fr);
+            display: flex;
+            flex-wrap: wrap;
             padding: 0.1rem;
             pointer-events: none;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
+            align-content: flex-start;
         }
 
         .note {
@@ -558,6 +559,19 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             align-items: center;
             justify-content: center;
             color: var(--note-color);
+            width: 33.33%;
+            height: 33.33%;
+            box-sizing: border-box;
+            position: relative;
+        }
+        
+        /* 标记数字样式优化 - 简洁版本 */
+        .note-value {
+            display: inline-block;
+            text-align: center;
+            color: var(--note-color);
+            font-size: 0.7rem;
+            font-weight: bold;
         }
 
         .number-pad {
@@ -583,21 +597,6 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
 
         .number-btn:hover {
             background: var(--highlight-bg);
-        }
-        
-        .note-indicator {
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            background: var(--note-mode-bg);
-            color: white;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.7rem;
         }
 
         .sidebar {
@@ -778,6 +777,28 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             color: var(--note-mode-bg);
             font-weight: bold;
         }
+        
+        .compact-notes {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            right: 2px;
+            bottom: 2px;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            padding: 1px;
+        }
+        
+        .compact-note {
+            width: 30%;
+            height: 30%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body class="<?php echo $dark_mode ? 'dark-mode' : ''; ?><?php echo $paused ? ' paused' : ''; ?>">
@@ -827,24 +848,34 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                             $is_fixed = $sudoku['board'][$i][$j] != 0;
                             $cell_class = $is_fixed ? 'cell fixed' : 'cell';
                             if ($note_mode) $cell_class .= ' note-mode-hover';
+                            
+                            $note_count = count($notes[$i][$j]);
                             ?>
                             <div class="<?php echo $cell_class; ?>" 
                                  data-row="<?php echo $i; ?>" 
                                  data-col="<?php echo $j; ?>">
                                 <?php if ($value != 0): ?>
                                     <div class="main-value"><?php echo $value; ?></div>
-                                <?php endif; ?>
-                                <div class="notes">
-                                    <?php for ($n = 1; $n <= 9; $n++): ?>
-                                        <div class="note" data-note="<?php echo $n; ?>">
-                                            <?php if (in_array($n, $notes[$i][$j])): ?>
-                                                <?php echo $n; ?>
-                                            <?php endif; ?>
-                                        </div>
-                                    <?php endfor; ?>
-                                </div>
-                                <?php if (!empty($notes[$i][$j]) && !$value): ?>
-                                    <div class="note-indicator"><?php echo count($notes[$i][$j]); ?></div>
+                                <?php else: ?>
+                                    <!-- 优化标记显示 - 简洁版本 -->
+                                    <div class="compact-notes">
+                                        <?php 
+                                        $note_numbers = $notes[$i][$j];
+                                        $note_positions = [
+                                            [1, 1], [1, 2], [1, 3],
+                                            [2, 1], [2, 2], [2, 3],
+                                            [3, 1], [3, 2], [3, 3]
+                                        ];
+                                        
+                                        // 只显示存在的标记数字
+                                        foreach ($note_numbers as $note_num): 
+                                            $pos = $note_positions[$note_num - 1];
+                                        ?>
+                                            <div class="compact-note" style="grid-row: <?php echo $pos[0]; ?>; grid-column: <?php echo $pos[1]; ?>">
+                                                <span class="note-value"><?php echo $note_num; ?></span>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
                                 <?php endif; ?>
                             </div>
                         <?php endfor; ?>
@@ -887,7 +918,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     <li>点击"标记模式"按钮进入标记状态</li>
                     <li>选择要标记的单元格</li>
                     <li>点击数字添加或移除候选标记</li>
-                    <li>标记的数字会显示在单元格的小方格中</li>
+                    <li>标记的数字会显示在单元格中</li>
+                    <li>每个格子可同时标记多个数字</li>
                     <li>点击"退出标记"返回正常模式</li>
                 </ol>
                 <p>规则：</p>
@@ -900,6 +932,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     <li>使用标记模式记录候选数字</li>
                     <li>深色模式可减少眼睛疲劳</li>
                     <li>完成数独后记得提交成绩</li>
+                    <li>按N键可快速切换标记模式</li>
                 </ul>
             </div>
         </div>
@@ -1194,12 +1227,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             // 键盘输入支持
             document.addEventListener('keydown', (e) => {
                 if (paused) return;
-                if (!selectedCell) return;
                 
                 if (e.key >= '1' && e.key <= '9') {
-                    setCellValue(e.key);
+                    if (selectedCell) setCellValue(e.key);
                 } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === ' ') {
-                    clearCell();
+                    if (selectedCell) clearCell();
                 } else if (e.key === 'n' || e.key === 'N') {
                     toggleNoteMode();
                 }
