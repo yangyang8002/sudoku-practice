@@ -166,6 +166,7 @@ if (empty($_SESSION['sudoku'])) {
     $_SESSION['user_board'] = $sudoku['board'];
     $_SESSION['notes'] = array_fill(0, 9, array_fill(0, 9, []));
     $_SESSION['cheated'] = false; // 标记是否查看了答案
+    $_SESSION['note_mode'] = false; // 标记模式状态
 }
 
 // 处理用户输入
@@ -238,6 +239,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['cheated'] = true;
         // 填充所有空白单元格的答案
         $_SESSION['user_board'] = $_SESSION['sudoku']['solution'];
+    } elseif (isset($_POST['toggle_note_mode'])) {
+        // 切换标记模式
+        $_SESSION['note_mode'] = !$_SESSION['note_mode'];
     }
 }
 
@@ -249,6 +253,7 @@ $start_time = $_SESSION['start_time'];
 $paused = $_SESSION['paused'];
 $cheated = $_SESSION['cheated'];
 $paused_time = $_SESSION['paused_time'];
+$note_mode = $_SESSION['note_mode'];
 
 // 计算已用时间
 if ($paused) {
@@ -306,6 +311,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             --pause-button-bg: #f39c12;
             --pause-button-hover: #e67e22;
             --cheated-color: #e74c3c;
+            --note-mode-bg: #9b59b6;
+            --note-mode-hover: #8e44ad;
         }
 
         .dark-mode {
@@ -326,6 +333,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             --submit-button-hover: #27ae60;
             --pause-button-bg: #f1c40f;
             --pause-button-hover: #f39c12;
+            --note-mode-bg: #8e44ad;
+            --note-mode-hover: #7d3c98;
         }
 
         * {
@@ -449,6 +458,22 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
         .pause-btn:hover {
             background: var(--pause-button-hover);
         }
+        
+        .note-mode-btn {
+            background: var(--note-mode-bg);
+        }
+        
+        .note-mode-btn:hover {
+            background: var(--note-mode-hover);
+        }
+        
+        .note-mode-btn.active {
+            box-shadow: 0 0 0 3px rgba(155, 89, 182, 0.5);
+        }
+        
+        .dark-mode .note-mode-btn.active {
+            box-shadow: 0 0 0 3px rgba(142, 68, 173, 0.7);
+        }
 
         .button-group {
             display: flex;
@@ -474,6 +499,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             width: 100%;
             max-width: 500px;
             aspect-ratio: 1/1;
+            position: relative;
         }
 
         .cell {
@@ -498,6 +524,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
 
         .cell.highlighted {
             background: var(--highlight-bg);
+        }
+        
+        .cell.note-mode-hover:hover {
+            background: rgba(155, 89, 182, 0.2);
         }
 
         .cell:nth-child(3n):not(:nth-child(9n)) {
@@ -553,6 +583,21 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
 
         .number-btn:hover {
             background: var(--highlight-bg);
+        }
+        
+        .note-indicator {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: var(--note-mode-bg);
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
         }
 
         .sidebar {
@@ -725,6 +770,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
         .cheated .main-value:not(.fixed) {
             color: var(--cheated-color);
         }
+        
+        .note-mode-instruction {
+            text-align: center;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--note-mode-bg);
+            font-weight: bold;
+        }
     </style>
 </head>
 <body class="<?php echo $dark_mode ? 'dark-mode' : ''; ?><?php echo $paused ? ' paused' : ''; ?>">
@@ -745,7 +798,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     <button id="newGameBtn">新游戏</button>
                     <button id="resetBtn">重置</button>
                     <button id="pauseBtn" class="pause-btn"><?php echo $paused ? '继续' : '暂停'; ?></button>
-                    <button id="noteModeBtn">标记模式</button>
+                    <button id="noteModeBtn" class="note-mode-btn <?php echo $note_mode ? 'active' : ''; ?>">
+                        <?php echo $note_mode ? '退出标记' : '标记模式'; ?>
+                    </button>
                     <button id="showAnswerBtn">显示答案</button>
                     <button id="submitScoreBtn" class="submit-btn">提交成绩</button>
                 </div>
@@ -758,15 +813,20 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             <?php if ($cheated): ?>
                 <div class="cheated-warning">您已查看答案，提交成绩将会有标记</div>
             <?php endif; ?>
+            
+            <?php if ($note_mode): ?>
+                <div class="note-mode-instruction">标记模式已激活 - 点击数字添加/移除候选数</div>
+            <?php endif; ?>
 
             <div class="sudoku-container">
-                <div class="sudoku-grid <?php echo $cheated ? 'cheated' : ''; ?>" id="sudokuGrid">
+                <div class="sudoku-grid <?php echo $cheated ? 'cheated' : ''; ?><?php echo $note_mode ? ' note-mode-active' : ''; ?>" id="sudokuGrid">
                     <?php for ($i = 0; $i < 9; $i++): ?>
                         <?php for ($j = 0; $j < 9; $j++): ?>
                             <?php 
                             $value = $user_board[$i][$j];
                             $is_fixed = $sudoku['board'][$i][$j] != 0;
                             $cell_class = $is_fixed ? 'cell fixed' : 'cell';
+                            if ($note_mode) $cell_class .= ' note-mode-hover';
                             ?>
                             <div class="<?php echo $cell_class; ?>" 
                                  data-row="<?php echo $i; ?>" 
@@ -783,6 +843,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                                         </div>
                                     <?php endfor; ?>
                                 </div>
+                                <?php if (!empty($notes[$i][$j]) && !$value): ?>
+                                    <div class="note-indicator"><?php echo count($notes[$i][$j]); ?></div>
+                                <?php endif; ?>
                             </div>
                         <?php endfor; ?>
                     <?php endfor; ?>
@@ -819,6 +882,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
 
             <div class="panel">
                 <h2>游戏说明</h2>
+                <p><strong>标记模式使用指南：</strong></p>
+                <ol>
+                    <li>点击"标记模式"按钮进入标记状态</li>
+                    <li>选择要标记的单元格</li>
+                    <li>点击数字添加或移除候选标记</li>
+                    <li>标记的数字会显示在单元格的小方格中</li>
+                    <li>点击"退出标记"返回正常模式</li>
+                </ol>
                 <p>规则：</p>
                 <ul>
                     <li>每行、每列和每个3x3宫格必须包含1-9的数字</li>
@@ -826,11 +897,9 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                 </ul>
                 <p>提示：</p>
                 <ul>
-                    <li>使用<strong>标记模式</strong>记录候选数字</li>
+                    <li>使用标记模式记录候选数字</li>
                     <li>深色模式可减少眼睛疲劳</li>
                     <li>完成数独后记得提交成绩</li>
-                    <li>按空格键可以清除当前单元格</li>
-                    <li>查看答案后提交的成绩将会有标记</li>
                 </ul>
             </div>
         </div>
@@ -864,7 +933,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
     <script>
         // 当前选中的单元格
         let selectedCell = null;
-        let noteMode = false;
+        let noteMode = <?php echo $note_mode ? 'true' : 'false'; ?>;
         let showAnswerMode = false;
         let timerInterval = null;
         let paused = <?php echo $paused ? 'true' : 'false'; ?>;
@@ -1023,6 +1092,22 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             });
         }
         
+        // 切换标记模式
+        function toggleNoteMode() {
+            const formData = new FormData();
+            formData.append('toggle_note_mode', '1');
+            
+            fetch('', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    location.reload();
+                }
+            });
+        }
+        
         // 事件监听
         document.addEventListener('DOMContentLoaded', () => {
             // 启动计时器
@@ -1041,8 +1126,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             document.querySelectorAll('.number-btn').forEach(btn => {
                 if (btn.id !== 'clearBtn') {
                     btn.addEventListener('click', () => {
-                        if (!paused) {
+                        if (!paused && selectedCell) {
                             setCellValue(btn.dataset.value);
+                        } else if (!paused && noteMode) {
+                            alert('请先选择一个单元格');
                         }
                     });
                 }
@@ -1050,8 +1137,10 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             
             // 清除按钮
             document.getElementById('clearBtn').addEventListener('click', () => {
-                if (!paused) {
+                if (!paused && selectedCell) {
                     clearCell();
+                } else if (!paused) {
+                    alert('请先选择一个单元格');
                 }
             });
             
@@ -1091,13 +1180,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             document.getElementById('pauseBtn').addEventListener('click', togglePause);
             
             // 标记模式按钮
-            document.getElementById('noteModeBtn').addEventListener('click', () => {
-                if (!paused) {
-                    noteMode = !noteMode;
-                    document.getElementById('noteModeBtn').classList.toggle('active', noteMode);
-                    document.getElementById('noteModeBtn').textContent = noteMode ? '退出标记' : '标记模式';
-                }
-            });
+            document.getElementById('noteModeBtn').addEventListener('click', toggleNoteMode);
             
             // 显示答案按钮
             document.getElementById('showAnswerBtn').addEventListener('click', showAnswer);
@@ -1117,6 +1200,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     setCellValue(e.key);
                 } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === ' ') {
                     clearCell();
+                } else if (e.key === 'n' || e.key === 'N') {
+                    toggleNoteMode();
                 }
             });
             
