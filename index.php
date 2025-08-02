@@ -8,37 +8,37 @@ define('RANKING_FILE', 'ranking.txt');
 function generate_sudoku() {
     // 生成一个完整的数独解决方案
     $solution = generate_sudoku_solution();
-    
+
     // 复制解决方案作为初始板
     $board = $solution;
-    
+
     // 移除数字创建谜题（非唯一解模式 - 移除更多数字）
     $cells_to_remove = 60; // 移除60个数字
     $removed = 0;
-    
+
     while ($removed < $cells_to_remove) {
         $row = rand(0, 8);
         $col = rand(0, 8);
-        
+
         if ($board[$row][$col] != 0) {
             $board[$row][$col] = 0;
             $removed++;
         }
     }
-    
+
     return ['board' => $board, 'solution' => $solution];
 }
 
 // 生成完整的数独解决方案
 function generate_sudoku_solution() {
     $grid = array_fill(0, 9, array_fill(0, 9, 0));
-    
+
     // 填充对角线上的3x3格子
     fill_diagonal_boxes($grid);
-    
+
     // 填充剩余格子
     fill_remaining(0, 3, $grid);
-    
+
     return $grid;
 }
 
@@ -53,7 +53,7 @@ function fill_diagonal_boxes(&$grid) {
 function fill_box(&$grid, $row, $col) {
     $nums = range(1, 9);
     shuffle($nums);
-    
+
     for ($i = 0; $i < 3; $i++) {
         for ($j = 0; $j < 3; $j++) {
             $grid[$row + $i][$col + $j] = array_pop($nums);
@@ -67,11 +67,11 @@ function fill_remaining($i, $j, &$grid) {
         $i += 1;
         $j = 0;
     }
-    
+
     if ($i >= 9 && $j >= 9) {
         return true;
     }
-    
+
     if ($i < 3) {
         if ($j < 3) $j = 3;
     } elseif ($i < 6) {
@@ -83,19 +83,19 @@ function fill_remaining($i, $j, &$grid) {
             if ($i >= 9) return true;
         }
     }
-    
+
     for ($num = 1; $num <= 9; $num++) {
         if (is_safe($grid, $i, $j, $num)) {
             $grid[$i][$j] = $num;
-            
+
             if (fill_remaining($i, $j + 1, $grid)) {
                 return true;
             }
-            
+
             $grid[$i][$j] = 0;
         }
     }
-    
+
     return false;
 }
 
@@ -105,22 +105,22 @@ function is_safe($grid, $row, $col, $num) {
     for ($i = 0; $i < 9; $i++) {
         if ($grid[$row][$i] == $num) return false;
     }
-    
+
     // 检查列
     for ($i = 0; $i < 9; $i++) {
         if ($grid[$i][$col] == $num) return false;
     }
-    
+
     // 检查3x3格子
     $startRow = $row - $row % 3;
     $startCol = $col - $col % 3;
-    
+
     for ($i = 0; $i < 3; $i++) {
         for ($j = 0; $j < 3; $j++) {
             if ($grid[$startRow + $i][$startCol + $j] == $num) return false;
         }
     }
-    
+
     return true;
 }
 
@@ -129,7 +129,7 @@ function get_ranking() {
     if (file_exists(RANKING_FILE)) {
         $ranking = file(RANKING_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         $ranking_data = [];
-        
+
         foreach ($ranking as $line) {
             list($time, $name) = explode('|', $line);
             $ranking_data[] = [
@@ -137,12 +137,12 @@ function get_ranking() {
                 'name' => $name
             ];
         }
-        
+
         // 按时间排序
         usort($ranking_data, function($a, $b) {
             return $a['time'] - $b['time'];
         });
-        
+
         return array_slice($ranking_data, 0, 10); // 返回前10名
     }
     return [];
@@ -175,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         list($row, $col) = explode(',', $_POST['cell']);
         $row = (int)$row;
         $col = (int)$col;
-        
+
         if (isset($_POST['value'])) {
             $value = (int)$_POST['value'];
             if ($value >= 1 && $value <= 9) {
@@ -212,14 +212,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['paused'] = false;
         $_SESSION['cheated'] = false;
     } elseif (isset($_POST['submit'])) {
-        $elapsed = time() - $_SESSION['start_time'] - $_SESSION['paused_time'];
-        $name = $_POST['player_name'] ?? '匿名';
-        
-        // 如果用户查看了答案，在名字后添加标记
+        // 检查是否查看了答案
         if ($_SESSION['cheated']) {
-            $name .= " (查看答案)";
+            // 如果查看了答案，不保存成绩，直接重定向
+            unset($_SESSION['sudoku']);
+            header("Location: ".$_SERVER['PHP_SELF']);
+            exit;
         }
         
+        $elapsed = time() - $_SESSION['start_time'] - $_SESSION['paused_time'];
+        $name = $_POST['player_name'] ?? '匿名';
+
         add_to_ranking($elapsed, $name);
         unset($_SESSION['sudoku']);
         header("Location: ".$_SERVER['PHP_SELF']);
@@ -313,6 +316,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             --cheated-color: #e74c3c;
             --note-mode-bg: #9b59b6;
             --note-mode-hover: #8e44ad;
+            --disabled-bg: #95a5a6;
+            --disabled-hover: #7f8c8d;
         }
 
         .dark-mode {
@@ -335,6 +340,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             --pause-button-hover: #f39c12;
             --note-mode-bg: #8e44ad;
             --note-mode-hover: #7d3c98;
+            --disabled-bg: #555;
+            --disabled-hover: #444;
         }
 
         * {
@@ -443,12 +450,25 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             background: var(--button-hover);
         }
 
+        button:disabled {
+            background: var(--disabled-bg);
+            cursor: not-allowed;
+        }
+
+        button:disabled:hover {
+            background: var(--disabled-bg);
+        }
+
         .submit-btn {
             background: var(--submit-button-bg);
         }
 
         .submit-btn:hover {
             background: var(--submit-button-hover);
+        }
+
+        .submit-btn:disabled {
+            background: var(--disabled-bg);
         }
 
         .pause-btn {
@@ -458,19 +478,19 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
         .pause-btn:hover {
             background: var(--pause-button-hover);
         }
-        
+
         .note-mode-btn {
             background: var(--note-mode-bg);
         }
-        
+
         .note-mode-btn:hover {
             background: var(--note-mode-hover);
         }
-        
+
         .note-mode-btn.active {
             box-shadow: 0 0 0 3px rgba(155, 89, 182, 0.5);
         }
-        
+
         .dark-mode .note-mode-btn.active {
             box-shadow: 0 0 0 3px rgba(142, 68, 173, 0.7);
         }
@@ -525,7 +545,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
         .cell.highlighted {
             background: var(--highlight-bg);
         }
-        
+
         .cell.note-mode-hover:hover {
             background: rgba(155, 89, 182, 0.2);
         }
@@ -564,7 +584,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             box-sizing: border-box;
             position: relative;
         }
-        
+
         /* 标记数字样式优化 - 简洁版本 */
         .note-value {
             display: inline-block;
@@ -741,14 +761,14 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             margin-top: 1rem;
             font-weight: bold;
         }
-        
+
         .completion-message {
             text-align: center;
             margin: 1rem 0;
             font-weight: bold;
             color: var(--submit-button-bg);
         }
-        
+
         .paused-overlay {
             position: absolute;
             top: 0;
@@ -765,11 +785,11 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             z-index: 10;
             border-radius: 10px;
         }
-        
+
         .cheated .main-value:not(.fixed) {
             color: var(--cheated-color);
         }
-        
+
         .note-mode-instruction {
             text-align: center;
             margin-top: 0.5rem;
@@ -777,7 +797,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             color: var(--note-mode-bg);
             font-weight: bold;
         }
-        
+
         .compact-notes {
             position: absolute;
             top: 2px;
@@ -789,7 +809,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             align-content: flex-start;
             padding: 1px;
         }
-        
+
         .compact-note {
             width: 30%;
             height: 30%;
@@ -798,6 +818,34 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             justify-content: center;
             font-size: 0.7rem;
             font-weight: bold;
+        }
+
+        .submit-disabled-tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .submit-disabled-tooltip .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .submit-disabled-tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
         }
     </style>
 </head>
@@ -823,18 +871,27 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                         <?php echo $note_mode ? '退出标记' : '标记模式'; ?>
                     </button>
                     <button id="showAnswerBtn">显示答案</button>
-                    <button id="submitScoreBtn" class="submit-btn">提交成绩</button>
+                    <?php if ($cheated): ?>
+                        <div class="submit-disabled-tooltip">
+                            <button id="submitScoreBtn" class="submit-btn" disabled>
+                                提交成绩
+                            </button>
+                            <span class="tooltip-text">您已查看答案，无法提交成绩</span>
+                        </div>
+                    <?php else: ?>
+                        <button id="submitScoreBtn" class="submit-btn">提交成绩</button>
+                    <?php endif; ?>
                 </div>
             </div>
-            
+
             <?php if ($completed): ?>
                 <div class="completion-message">恭喜！您已完成数独！</div>
             <?php endif; ?>
-            
+
             <?php if ($cheated): ?>
-                <div class="cheated-warning">您已查看答案，提交成绩将会有标记</div>
+                <div class="cheated-warning">您已查看答案，无法提交成绩</div>
             <?php endif; ?>
-            
+
             <?php if ($note_mode): ?>
                 <div class="note-mode-instruction">标记模式已激活 - 点击数字添加/移除候选数</div>
             <?php endif; ?>
@@ -848,7 +905,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                             $is_fixed = $sudoku['board'][$i][$j] != 0;
                             $cell_class = $is_fixed ? 'cell fixed' : 'cell';
                             if ($note_mode) $cell_class .= ' note-mode-hover';
-                            
+
                             $note_count = count($notes[$i][$j]);
                             ?>
                             <div class="<?php echo $cell_class; ?>" 
@@ -866,7 +923,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                                             [2, 1], [2, 2], [2, 3],
                                             [3, 1], [3, 2], [3, 3]
                                         ];
-                                        
+
                                         // 只显示存在的标记数字
                                         foreach ($note_numbers as $note_num): 
                                             $pos = $note_positions[$note_num - 1];
@@ -933,6 +990,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     <li>深色模式可减少眼睛疲劳</li>
                     <li>完成数独后记得提交成绩</li>
                     <li>按N键可快速切换标记模式</li>
+                    <li><strong>查看答案后将无法提交成绩</strong></li>
                 </ul>
             </div>
         </div>
@@ -947,7 +1005,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
             <h2>恭喜完成!</h2>
             <p>你用时: <span id="finalTime"><?php echo $formatted_time; ?></span></p>
             <?php if ($cheated): ?>
-                <div class="cheated-warning">您已查看答案，提交的成绩将会有标记</div>
+                <div class="cheated-warning">您已查看答案，无法提交成绩</div>
             <?php endif; ?>
             <form method="post" id="submitForm">
                 <div class="form-group">
@@ -957,7 +1015,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                 </div>
                 <div class="modal-buttons">
                     <button type="button" id="cancelSubmit">取消</button>
-                    <button type="submit" name="submit" class="submit-btn">提交成绩</button>
+                    <button type="submit" name="submit" class="submit-btn" <?php echo $cheated ? 'disabled' : ''; ?>>提交成绩</button>
                 </div>
             </form>
         </div>
@@ -971,7 +1029,8 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
         let timerInterval = null;
         let paused = <?php echo $paused ? 'true' : 'false'; ?>;
         let elapsedSeconds = <?php echo $elapsed_time; ?>;
-        
+        let cheated = <?php echo $cheated ? 'true' : 'false'; ?>;
+
         // 初始化计时器
         function startTimer() {
             if (!paused) {
@@ -984,32 +1043,32 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                 }, 1000);
             }
         }
-        
+
         // 选择单元格
         function selectCell(cell) {
             if (paused) return;
-            
+
             // 移除之前的高亮
             document.querySelectorAll('.cell.highlighted').forEach(c => {
                 c.classList.remove('highlighted');
             });
-            
+
             // 高亮当前行和列
             const row = cell.dataset.row;
             const col = cell.dataset.col;
-            
+
             document.querySelectorAll(`.cell[data-row="${row}"]`).forEach(c => {
                 c.classList.add('highlighted');
             });
-            
+
             document.querySelectorAll(`.cell[data-col="${col}"]`).forEach(c => {
                 c.classList.add('highlighted');
             });
-            
+
             // 高亮当前3x3宫格
             const boxRow = Math.floor(row / 3) * 3;
             const boxCol = Math.floor(col / 3) * 3;
-            
+
             for (let i = boxRow; i < boxRow + 3; i++) {
                 for (let j = boxCol; j < boxCol + 3; j++) {
                     const cellElement = document.querySelector(`.cell[data-row="${i}"][data-col="${j}"]`);
@@ -1018,26 +1077,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     }
                 }
             }
-            
+
             // 高亮当前单元格
             cell.classList.add('highlighted');
             selectedCell = cell;
         }
-        
+
         // 设置单元格值
         function setCellValue(value) {
             if (paused) return;
             if (!selectedCell || selectedCell.classList.contains('fixed')) return;
-            
+
             const formData = new FormData();
             formData.append('cell', `${selectedCell.dataset.row},${selectedCell.dataset.col}`);
-            
+
             if (noteMode) {
                 formData.append('note', value);
             } else {
                 formData.append('value', value);
             }
-            
+
             fetch('', {
                 method: 'POST',
                 body: formData
@@ -1048,16 +1107,16 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                 }
             });
         }
-        
+
         // 清除单元格
         function clearCell() {
             if (paused) return;
             if (!selectedCell || selectedCell.classList.contains('fixed')) return;
-            
+
             const formData = new FormData();
             formData.append('cell', `${selectedCell.dataset.row},${selectedCell.dataset.col}`);
             formData.append('clear', '1');
-            
+
             fetch('', {
                 method: 'POST',
                 body: formData
@@ -1068,19 +1127,19 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                 }
             });
         }
-        
+
         // 切换深色模式
         function toggleDarkMode() {
             const isDarkMode = document.body.classList.toggle('dark-mode');
             document.getElementById('themeToggle').textContent = isDarkMode ? '☀️' : '🌙';
             document.cookie = `dark_mode=${isDarkMode}; path=/; max-age=${60*60*24*365}`;
         }
-        
+
         // 显示答案
         function showAnswer() {
             const formData = new FormData();
             formData.append('show_answer', '1');
-            
+
             fetch('', {
                 method: 'POST',
                 body: formData
@@ -1091,7 +1150,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                 }
             });
         }
-        
+
         // 提交成绩
         function submitScore() {
             // 检查是否已完成
@@ -1101,19 +1160,24 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     completed = false;
                 }
             });
-            
+
             if (completed) {
+                // 检查是否已经作弊
+                if (cheated) {
+                    alert('您已经查看了答案，无法提交成绩！');
+                    return;
+                }
                 document.getElementById('completionModal').style.display = 'flex';
             } else {
                 alert('请先完成数独游戏再提交成绩！');
             }
         }
-        
+
         // 切换暂停状态
         function togglePause() {
             const formData = new FormData();
             formData.append('toggle_pause', '1');
-            
+
             fetch('', {
                 method: 'POST',
                 body: formData
@@ -1124,12 +1188,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                 }
             });
         }
-        
+
         // 切换标记模式
         function toggleNoteMode() {
             const formData = new FormData();
             formData.append('toggle_note_mode', '1');
-            
+
             fetch('', {
                 method: 'POST',
                 body: formData
@@ -1140,12 +1204,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                 }
             });
         }
-        
+
         // 事件监听
         document.addEventListener('DOMContentLoaded', () => {
             // 启动计时器
             startTimer();
-            
+
             // 单元格选择
             document.querySelectorAll('.cell').forEach(cell => {
                 cell.addEventListener('click', () => {
@@ -1154,7 +1218,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     }
                 });
             });
-            
+
             // 数字按钮
             document.querySelectorAll('.number-btn').forEach(btn => {
                 if (btn.id !== 'clearBtn') {
@@ -1167,7 +1231,7 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     });
                 }
             });
-            
+
             // 清除按钮
             document.getElementById('clearBtn').addEventListener('click', () => {
                 if (!paused && selectedCell) {
@@ -1176,12 +1240,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     alert('请先选择一个单元格');
                 }
             });
-            
+
             // 新游戏按钮
             document.getElementById('newGameBtn').addEventListener('click', () => {
                 const formData = new FormData();
                 formData.append('new_game', '1');
-                
+
                 fetch('', {
                     method: 'POST',
                     body: formData
@@ -1192,12 +1256,12 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     }
                 });
             });
-            
+
             // 重置按钮
             document.getElementById('resetBtn').addEventListener('click', () => {
                 const formData = new FormData();
                 formData.append('reset', '1');
-                
+
                 fetch('', {
                     method: 'POST',
                     body: formData
@@ -1208,26 +1272,26 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     }
                 });
             });
-            
+
             // 暂停按钮
             document.getElementById('pauseBtn').addEventListener('click', togglePause);
-            
+
             // 标记模式按钮
             document.getElementById('noteModeBtn').addEventListener('click', toggleNoteMode);
-            
+
             // 显示答案按钮
             document.getElementById('showAnswerBtn').addEventListener('click', showAnswer);
-            
+
             // 提交成绩按钮
             document.getElementById('submitScoreBtn').addEventListener('click', submitScore);
-            
+
             // 主题切换
             document.getElementById('themeToggle').addEventListener('click', toggleDarkMode);
-            
+
             // 键盘输入支持
             document.addEventListener('keydown', (e) => {
                 if (paused) return;
-                
+
                 if (e.key >= '1' && e.key <= '9') {
                     if (selectedCell) setCellValue(e.key);
                 } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === ' ') {
@@ -1236,14 +1300,17 @@ $dark_mode = isset($_COOKIE['dark_mode']) && $_COOKIE['dark_mode'] === 'true';
                     toggleNoteMode();
                 }
             });
-            
+
             // 检查游戏是否完成
             <?php if ($completed): ?>
                 setTimeout(() => {
-                    document.getElementById('completionModal').style.display = 'flex';
+                    // 如果查看了答案，不显示提交弹窗
+                    if (!cheated) {
+                        document.getElementById('completionModal').style.display = 'flex';
+                    }
                 }, 500);
             <?php endif; ?>
-            
+
             // 关闭完成弹窗
             document.getElementById('cancelSubmit').addEventListener('click', () => {
                 document.getElementById('completionModal').style.display = 'none';
